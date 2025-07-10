@@ -1,10 +1,8 @@
 import logging
-import asyncio
-from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram.ext import Application, CommandHandler
 
 # Funkcja na komendę /start
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def start(update, context):
     await update.message.reply_text("Bot działa!")
 
 # Ustawienia logowania
@@ -13,18 +11,12 @@ logging.basicConfig(
     level=logging.INFO
 )
 
-# TOKEN z BotFather
-TOKEN = "TU_WKLEJ_TOKEN"  # <-- tutaj wklej swój prawdziwy token
+# Wklej swój TOKEN z BotFather
+TOKEN = "TU_WKLEJ_TOKEN"
 
-# Główna funkcja asynchroniczna
-async def main():
-    app = Application.builder().token(TOKEN).build()
+# Tworzymy aplikację i handler
+app = Application.builder().token(TOKEN).build()
+app.add_handler(CommandHandler("start", start))
 
-    app.add_handler(CommandHandler("start", start))
-
-    print("Bot wystartował! ✅")
-    await app.run_polling()
-
-# Uruchomienie bota
-if __name__ == "__main__":
-    asyncio.run(main())
+# Bot działa w pętli 24/7
+app.run_polling()
