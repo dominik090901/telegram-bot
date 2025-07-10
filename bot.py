@@ -2,9 +2,11 @@ import logging
 import threading
 import requests
 import asyncio
+import os
 from telegram.ext import Application, CommandHandler
 from bs4 import BeautifulSoup
 from datetime import datetime
+from flask import Flask
 
 # Konfiguracja logowania
 logging.basicConfig(
@@ -17,78 +19,59 @@ TOKEN = "7280780498:AAFUnTebOpiqv0_jz-EIEVzdOQvLsLLEXvE"
 URL = "https://telegram-bot1-eod3.onrender.com"
 daily_tips = {}
 
-# Funkcja do pobierania aktualnego czasu
-def get_current_time():
-    now = datetime.now()  # Pobiera aktualny czas
-    return now.strftime("%Y-%m-%d %H:%M:%S")  # Format daty: Rok-Miesiąc-Dzień Godzina:Minuta:Sekunda
-
 # Komendy
 async def start(update, context):
     await update.message.reply_text("Bot działa!")
 
-# Komenda /gram - do zmiany stawki
 async def gram(update, context):
     if context.args:
-        amount = context.args[0]
-        await update.message.reply_text(f"Zmieniono stawkę na {amount} zł")
+        try:
+            amount = float(context.args[0])
+            await update.message.reply_text(f"Stawka: {amount} zł została zarejestrowana.")
+        except ValueError:
+            await update.message.reply_text("Wprowadź poprawną kwotę (np. /gram 10).")
     else:
-        await update.message.reply_text("Proszę podać kwotę, np. /gram 10zł")
+        await update.message.reply_text("Proszę podać kwotę stawki (np. /gram 10).")
 
-# Komenda /niegram - do rezygnacji ze stawki
 async def niegram(update, context):
-    await update.message.reply_text("Zrezygnowano z obstawiania.")
+    await update.message.reply_text("Nie gram!")
 
-# Komenda do wysyłania pewniaków z godziną
-async def wyslij_typ(update, context):
-    current_time = get_current_time()  # Pobiera aktualny czas
-    typ = "Tenis: Zwycięzca meczu: XYZ, kurs 1.8"
-    await update.message.reply_text(f"{typ}\nDodano o: {current_time}")  # Dodaje godzinę pod typem
+async def dlaczego(update, context):
+    await update.message.reply_text("Bot analizuje statystyki i typy na podstawie dostępnych danych.")
 
-# Funkcja pingująca, aby utrzymać bota aktywnego
+# Funkcja pingowania do 10 minut
 def ping_self():
     try:
         requests.get(URL)
         print("Ping OK")
     except Exception as e:
         print(f"Ping failed: {e}")
-    threading.Timer(600, ping_self).start()  # Ping co 600 sekund = 10 minut
+    threading.Timer(600, ping_self).start()  # ping co 600 sekund = 10 minut
 
-# Funkcja do pobierania kursów z Betclick (przykładowe, musisz dostosować do strony)
-def get_betclick_odds():
-    url = "URL_DO_BETCLICK"
-    response = requests.get(url)
-    soup = BeautifulSoup(response.text, 'html.parser')
-    
-    # Załóżmy, że kursy są w divach z klasą 'odds'
-    odds_elements = soup.find_all('div', class_='odds')
-    odds = []
-    for element in odds_elements:
-        odds.append(element.text.strip())
-    return odds
+# Uruchom pingowanie
+ping_self()
 
-# Funkcja do wysyłania typów codziennie o określonej godzinie
-async def send_daily_tips():
-    while True:
-        # Pobierz aktualne typy i wysyłaj
-        await wyslij_typ(update, context)  # To jest przykład, musisz dostosować do swojej logiki
-        await asyncio.sleep(21600)  # Czekaj 6 godzin
+# Tworzenie aplikacji bota
+app = Application.builder().token(TOKEN).build()
+app.add_handler(CommandHandler("start", start))
+app.add_handler(CommandHandler("gram", gram))
+app.add_handler(CommandHandler("niegram", niegram))
+app.add_handler(CommandHandler("dlaczego", dlaczego))
 
-# Główna funkcja uruchamiająca bota
-async def main():
-    application = Application.builder().token(TOKEN).build()
+# Funkcja nasłuchująca na porcie Render
+def run_flask():
+    flask_app = Flask(__name__)
 
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("gram", gram))
-    application.add_handler(CommandHandler("niegram", niegram))
+    @flask_app.route("/")
+    def home():
+        return "Bot działa!"
 
-    # Pingowanie co 10 minut
-    ping_self()
+    # Nasłuchiwanie na porcie, który Render ustawia
+    port = int(os.environ.get("PORT", 8080))  # domyślny port to 8080
+    flask_app.run(host="0.0.0.0", port=port)
 
-    # Uruchomienie bota w tle
-    job_queue = application.job_queue
-    job_queue.run_repeating(wyslij_typ, interval=21600, first=5)
-
-    await application.run_polling()
-
-if __name__ == '__main__':
-    asyncio.run(main())
+# Uruchomienie aplikacji bota w tle
+if __name__ == "__main__":
+    loop = asyncio.get_event_loop()
+    loop.create_task(app.run_polling())
+    run_flask()  # Uruchomienie Flask, aby Render mógł nasłuchiwać na porcie
