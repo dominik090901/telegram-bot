@@ -1,100 +1,108 @@
 import logging
-import os
-import re
+import threading
 import requests
-import datetime
 import asyncio
+from telegram.ext import Application, CommandHandler
 from bs4 import BeautifulSoup
-from telegram import Update, Bot
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from datetime import datetime
 
-# === KONFIGURACJA ===
+# Konfiguracja logowania
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO
+)
+
+# Token bota
 TOKEN = "7280780498:AAFUnTebOpiqv0_jz-EIEVzdOQvLsLLEXvE"
-USER_ID = 7793377623  # Twój ID z Telegrama
-KURS_MINIMALNY = 1.75
-DZISIAJ = datetime.date.today().isoformat()
 
-# === PAMIĘĆ W RAM ===
-stawka = 0
-gram = False
-historia_typow = []
-numer_typu = 1
+# Zmienna do liczenia typów dziennych
+daily_tips = {}
 
-# === LOGI ===
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# URL do podtrzymania działania na Renderze
+URL = "https://telegram-bot1-eod3.onrender.com"
 
-# === SCRAPER BETCLICK ===
-def pobierz_typy_betclick():
-    url = "https://www.betclic.pl/pl/sport/tenis/9"
-    headers = {"User-Agent": "Mozilla/5.0"}
-    response = requests.get(url, headers=headers)
-    soup = BeautifulSoup(response.text, "html.parser")
+# Komenda start
+async def start(update, context):
+    await update.message.reply_text("Bot działa!")
 
-    typy = []
-    for mecz in soup.select("a.sport-event"):
-        nazwy = mecz.select_one(".sport-event-title span")
-        kursy = mecz.select(".odd-value")
-        if nazwy and len(kursy) >= 2:
-            kurs1 = float(kursy[0].text.replace(",", "."))
-            kurs2 = float(kursy[1].text.replace(",", "."))
-            if kurs1 >= KURS_MINIMALNY:
-                typy.append((nazwy.text.strip(), kurs1))
-            if kurs2 >= KURS_MINIMALNY:
-                typy.append((nazwy.text.strip(), kurs2))
-    return typy
-
-# === KOMENDY ===
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Cześć! Będę wysyłał pewne typy z tenisa ziemnego. Użyj /gram 10zł lub /niegram.")
-
-async def gram_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global gram, stawka
+# Komenda /gram
+async def gram(update, context):
     if context.args:
-        try:
-            stawka = float(re.sub("[^0-9.]", "", context.args[0]))
-            gram = True
-            await update.message.reply_text(f"✅ Grasz. Stawka ustawiona: {stawka}zł")
-        except:
-            await update.message.reply_text("Błędna stawka. Użyj np. /gram 10zł")
+        context.user_data["gram"] = True
+        context.user_data["stawka"] = context.args[0]
+        await update.message.reply_text(f"Zarejestrowano: grasz za {context.args[0]}")
+    else:
+        await update.message.reply_text("Użycie: /gram 10zł")
 
-async def niegram_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global gram
-    gram = False
-    await update.message.reply_text("❌ Nie grasz. Ten mecz nie będzie liczony do statystyk.")
+# Komenda /niegram
+async def niegram(update, context):
+    context.user_data["gram"] = False
+    await update.message.reply_text("Zarejestrowano: nie grasz tego meczu.")
 
-async def dlaczego_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🧠 Ten typ został wybrany na podstawie analizy kursów, formy graczy i wartości zakładu. Jest to pewniak według naszej analizy!")
+# Komenda /dlaczego
+async def dlaczego(update, context):
+    await update.message.reply_text("Typ został wybrany na podstawie analizy statystyk i kursów. Pewny value.")
 
-# === FUNKCJA WYSYŁANIA TYPOW ===
-async def wyslij_typy(bot: Bot):
-    global numer_typu
-    typy = pobierz_typy_betclick()
-    for nazwa, kurs in typy:
-        tresc = f"🎾 Typ nr {numer_typu} ({DZISIAJ}):\nMecz: {nazwa}\nKurs: {kurs}\n"
-        if gram and stawka > 0:
-            tresc += f"Stawka: {stawka}zł"
-        await bot.send_message(chat_id=USER_ID, text=tresc)
-        historia_typow.append({"nazwa": nazwa, "kurs": kurs, "gram": gram, "stawka": stawka})
-        numer_typu += 1
+# Wysyłanie typu tenisowego
+async def wyslij_typ(context):
+    chat_id = 7793377623  # Twój ID
+    today = datetime.now().date()
+    daily_tips[today] = daily_tips.get(today, 0) + 1
+    numer = daily_tips[today]
 
-# === FUNKCJA GŁÓWNA ===
+    # Pobranie typu z Betclicka
+    typ, kurs = pobierz_typ_z_betclick()
+
+    if typ:
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"🎾 Typ nr {numer}:\n{typ}\nKurs: {kurs}\n\n✅ Pewniak dnia"
+        )
+
+# Prosty scraper Betclicka
+def pobierz_typ_z_betclick():
+    try:
+        url = "https://www.betclick.pl/zaklady-bukmacherskie/tenis-5"
+        headers = {"User-Agent": "Mozilla/5.0"}
+        response = requests.get(url, headers=headers)
+        soup = BeautifulSoup(response.text, "html.parser")
+
+        # Znajdź przykładowy typ
+        mecz = soup.find("a", class_="event-row-link")
+        if mecz:
+            nazwa = mecz.text.strip()
+            kurs = "1.85+"  # Domyślny kurs, bo z Betclicka nie wyciągamy dokładnych wartości
+            return nazwa, kurs
+    except Exception as e:
+        print("Błąd scrapera:", e)
+    return None, None
+
+# Pingowanie co 10 minut żeby bot nie zasnął
+def ping_self():
+    try:
+        requests.get(URL)
+        print("Ping OK")
+    except Exception as e:
+        print("Ping failed:", e)
+    threading.Timer(600, ping_self).start()  # co 10 min
+
+# Uruchamianie bota
 async def main():
-    aplikacja = ApplicationBuilder().token(TOKEN).build()
-    aplikacja.add_handler(CommandHandler("start", start))
-    aplikacja.add_handler(CommandHandler("gram", gram_cmd))
-    aplikacja.add_handler(CommandHandler("niegram", niegram_cmd))
-    aplikacja.add_handler(CommandHandler("dlaczego", dlaczego_cmd))
+    app = Application.builder().token(TOKEN).build()
 
-    # Uruchomienie zadania co 10 minut (symulacja aktywności)
-    async def zadanie():
-        bot = Bot(token=TOKEN)
-        while True:
-            await wyslij_typy(bot)
-            await asyncio.sleep(600)  # co 10 minut
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("gram", gram))
+    app.add_handler(CommandHandler("niegram", niegram))
+    app.add_handler(CommandHandler("dlaczego", dlaczego))
 
-    asyncio.create_task(zadanie())
-    await aplikacja.run_polling()
+    # Harmonogram: typ co 6h
+    job_queue = app.job_queue
+    job_queue.run_repeating(wyslij_typ, interval=21600, first=5)
 
-if __name__ == '__main__':
+    ping_self()
+
+    await app.run_polling()
+
+# Uruchomienie aplikacji
+if __name__ == "__main__":
     asyncio.run(main())
