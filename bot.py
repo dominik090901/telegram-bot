@@ -14,7 +14,8 @@ TOKEN = "7280780498:AAFUnTebOpiqv0_jz-EIEVzdOQvLsLLEXvE"
 app = Application.builder().token(TOKEN).build()
 app.add_handler(CommandHandler("start", start))
 
-app.run_polling()import threading
+import threading
+app.run_polling()
 import requests
 
 # Adres Twojego bota na Render
