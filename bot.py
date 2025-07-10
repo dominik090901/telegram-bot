@@ -14,4 +14,21 @@ TOKEN = "7280780498:AAFUnTebOpiqv0_jz-EIEVzdOQvLsLLEXvE"
 app = Application.builder().token(TOKEN).build()
 app.add_handler(CommandHandler("start", start))
 
-app.run_polling()
+app.run_polling()import threading
+import requests
+
+# Adres Twojego bota na Render
+URL = "https://telegram-bot1-eod3.onrender.com"
+
+# Funkcja do pingowania co 10 minut
+def ping_self():
+    try:
+        requests.get(URL)
+        print("Ping OK")
+    except Exception as e:
+        print("Ping failed:", e)
+    threading.Timer(600, ping_self).start()  # ping co 600 sekund = 10 min
+
+# Uruchom pingowanie
+ping_self()
+
