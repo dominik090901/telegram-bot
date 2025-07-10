@@ -6,17 +6,14 @@ import os
 from bs4 import BeautifulSoup
 from telegram.ext import Application, CommandHandler
 from datetime import datetime
+import asyncio
 
-# Ustaw loggera
 logging.basicConfig(level=logging.INFO)
 
-# Token bota
 TOKEN = '7280780498:AAFUnTebOpiqv0_jz-EIEVzdOQvLsLLEXvE'
 
-# Lista typów
 typy = []
 
-# Komendy
 async def start(update, context):
     await update.message.reply_text("👋 Cześć! Wpisz /gram 10zł lub /niegram albo /dlaczego")
 
@@ -30,14 +27,12 @@ async def niegram(update, context):
 async def dlaczego(update, context):
     await update.message.reply_text("🤖 Typy są wybierane dzięki analizie statystyk i gry na podstawie dostępnych danych.")
 
-# Funkcja główna do typów
 def scrape_typy():
     return [
         {"mecz": "Nadal vs Djokovic", "typ": "Nadal wygra", "kurs": 1.82},
         {"mecz": "Świątek vs Gauff", "typ": "Świątek -1.5 seta", "kurs": 2.05}
     ]
 
-# Funkcja do wysyłania typów
 async def wyslij_typy(application):
     global typy
     typy_dnia = scrape_typy()
@@ -50,10 +45,8 @@ async def wyslij_typy(application):
             numer += 1
     typy = typy_dnia
 
-# Start bota
 async def main():
     app = Application.builder().token(TOKEN).build()
-
     app.chat_ids = set()
 
     app.add_handler(CommandHandler("start", start))
@@ -70,6 +63,5 @@ async def main():
         await wyslij_typy(app)
         await asyncio.sleep(600)
 
-import asyncio
 if __name__ == '__main__':
     asyncio.run(main())
