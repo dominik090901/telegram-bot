@@ -17,86 +17,78 @@ TOKEN = "7280780498:AAFUnTebOpiqv0_jz-EIEVzdOQvLsLLEXvE"
 URL = "https://telegram-bot1-eod3.onrender.com"
 daily_tips = {}
 
+# Funkcja do pobierania aktualnego czasu
+def get_current_time():
+    now = datetime.now()  # Pobiera aktualny czas
+    return now.strftime("%Y-%m-%d %H:%M:%S")  # Format daty: Rok-Miesiąc-Dzień Godzina:Minuta:Sekunda
+
 # Komendy
 async def start(update, context):
     await update.message.reply_text("Bot działa!")
 
+# Komenda /gram - do zmiany stawki
 async def gram(update, context):
     if context.args:
-        context.user_data["gram"] = True
-        context.user_data["stawka"] = context.args[0]
-        await update.message.reply_text(f"Zarejestrowano: grasz za {context.args[0]}")
+        amount = context.args[0]
+        await update.message.reply_text(f"Zmieniono stawkę na {amount} zł")
     else:
-        await update.message.reply_text("Użycie: /gram 10zł")
+        await update.message.reply_text("Proszę podać kwotę, np. /gram 10zł")
 
+# Komenda /niegram - do rezygnacji ze stawki
 async def niegram(update, context):
-    context.user_data["gram"] = False
-    await update.message.reply_text("Zarejestrowano: nie grasz tego meczu.")
+    await update.message.reply_text("Zrezygnowano z obstawiania.")
 
-async def dlaczego(update, context):
-    await update.message.reply_text("Typ został wybrany na podstawie analizy statystyk i kursów. Pewny value.")
+# Komenda do wysyłania pewniaków z godziną
+async def wyslij_typ(update, context):
+    current_time = get_current_time()  # Pobiera aktualny czas
+    typ = "Tenis: Zwycięzca meczu: XYZ, kurs 1.8"
+    await update.message.reply_text(f"{typ}\nDodano o: {current_time}")  # Dodaje godzinę pod typem
 
-# Scraper typów
-def pobierz_typ_z_betclick():
-    try:
-        url = "https://www.betclick.pl/zaklady-bukmacherskie/tenis-5"
-        headers = {"User-Agent": "Mozilla/5.0"}
-        response = requests.get(url, headers=headers)
-        soup = BeautifulSoup(response.text, "html.parser")
-        mecz = soup.find("a", class_="event-row-link")
-        if mecz:
-            nazwa = mecz.text.strip()
-            kurs = "1.85+"  # kurs przykładowy
-            return nazwa, kurs
-    except Exception as e:
-        print("Błąd scrapera:", e)
-    return None, None
-
-# Wysyłanie typów
-async def wyslij_typ(context):
-    chat_id = 7793377623
-    today = datetime.now().date()
-    daily_tips[today] = daily_tips.get(today, 0) + 1
-    numer = daily_tips[today]
-
-    typ, kurs = pobierz_typ_z_betclick()
-    if typ:
-        await context.bot.send_message(
-            chat_id=chat_id,
-            text=f"🎾 Typ nr {numer}:\n{typ}\nKurs: {kurs}\n\n✅ Pewniak dnia"
-        )
-
-# Ping Render co 10 min
+# Funkcja pingująca, aby utrzymać bota aktywnego
 def ping_self():
     try:
         requests.get(URL)
         print("Ping OK")
     except Exception as e:
-        print("Ping failed:", e)
-    threading.Timer(600, ping_self).start()
+        print(f"Ping failed: {e}")
+    threading.Timer(600, ping_self).start()  # Ping co 600 sekund = 10 minut
 
-# Główna pętla bota
+# Funkcja do pobierania kursów z Betclick (przykładowe, musisz dostosować do strony)
+def get_betclick_odds():
+    url = "URL_DO_BETCLICK"
+    response = requests.get(url)
+    soup = BeautifulSoup(response.text, 'html.parser')
+    
+    # Załóżmy, że kursy są w divach z klasą 'odds'
+    odds_elements = soup.find_all('div', class_='odds')
+    odds = []
+    for element in odds_elements:
+        odds.append(element.text.strip())
+    return odds
+
+# Funkcja do wysyłania typów codziennie o określonej godzinie
+async def send_daily_tips():
+    while True:
+        # Pobierz aktualne typy i wysyłaj
+        await wyslij_typ(update, context)  # To jest przykład, musisz dostosować do swojej logiki
+        await asyncio.sleep(21600)  # Czekaj 6 godzin
+
+# Główna funkcja uruchamiająca bota
 async def main():
-    app = Application.builder().token(TOKEN).build()
+    application = Application.builder().token(TOKEN).build()
 
-    # Dodaj komendy
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("gram", gram))
-    app.add_handler(CommandHandler("niegram", niegram))
-    app.add_handler(CommandHandler("dlaczego", dlaczego))
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("gram", gram))
+    application.add_handler(CommandHandler("niegram", niegram))
 
-    # Uruchom aplikację i zaplanuj zadania
-    await app.initialize()
-
-    # ➕ Dostęp do job_queue po initialize
-    app.job_queue.run_repeating(wyslij_typ, interval=21600, first=5)
-
+    # Pingowanie co 10 minut
     ping_self()
 
-    await app.start()
-    await app.updater.start_polling()
-    await app.updater.idle()
+    # Uruchomienie bota w tle
+    job_queue = application.job_queue
+    job_queue.run_repeating(wyslij_typ, interval=21600, first=5)
 
-# Start
-if __name__ == "__main__":
+    await application.run_polling()
+
+if __name__ == '__main__':
     asyncio.run(main())
