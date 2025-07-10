@@ -23,7 +23,7 @@ URL = "https://telegram-bot1-eod3.onrender.com"
 # Funkcja do pingowania co 10 minut
 def ping_self():
     try:
-        requests.get(URL)
+        requests.get(https://telegram-bot1-eod3.onrender.com)
         print("Ping OK")
     except Exception as e:
         print("Ping failed:", e)
